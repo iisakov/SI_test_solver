@@ -13,13 +13,19 @@
 --Задача может переходить в один и тот же статус несколько раз.
 --Переведите время в часы с округлением до двух знаков после запятой.
 
--- Класическое решение
-SELECT
+with t as (
+SELECT 
+	issue_key,
+	sum(minutes_in_status) sum_minutes_in_status
+FROM history h
+group by issue_key, status
+having status = 'Open'
+)
+select 
 	substr(issue_key,0,instr(issue_key, '-')),
-	round(sum(h.minutes_in_status)/60.00, 2)
-FROM  history h
+	round(avg(t.sum_minutes_in_status)/60.00, 2)
+from t
 group by substr(issue_key,0,instr(issue_key, '-'))
-
 
 --SQL 2 
 --Напишите запрос, который выведет ключ задачи, последний статус и его время создания для задач, которые открыты на данный момент времени.
@@ -29,51 +35,20 @@ group by substr(issue_key,0,instr(issue_key, '-'))
 --Оформите запрос таким образом, чтобы, изменив дату, его можно было использовать для поиска открытых задач в любой момент времени в прошлом
 --Переведите время в текстовое представление
 
--- Классическое решение
-WITH c_date as (
-	select DATETIME('2020-10-10') cd -- Изменение даты ищет открытые задачи на дату
+with t as (
+select 
+	issue_key,
+	status,
+	DATETIME(started_at/1000, 'unixepoch') normal_started_at,
+	row_number() over(partition by issue_key order by started_at desc) num
+from history h
+where DATETIME(started_at/1000, 'unixepoch') <= DATETIME('2022-08-22 12:13:58') -- <- Изменяя дату, можно менять в прошлом.
+order by started_at
 )
-select
-	t.issue_key,
-	min_started_at "min",
-	h2.status 
-from (
-SELECT 
-	h.issue_key,
-	max(DATETIME(h.started_at/1000, 'unixepoch')) max_started_at,
-	min(DATETIME(h.started_at/1000, 'unixepoch')) min_started_at
-FROM history h 
-where DATETIME(h.started_at/1000, 'unixepoch') <= (select cd from c_date)
-group by issue_key
-HAVING 
-	(GROUP_concat(status) not like '%Closed%' and GROUP_concat(status) not like '%Resolved%') 
-and max(DATETIME(h.started_at/1000, 'unixepoch')) <= (select cd from c_date)
-) t
-LEFT join history h2 on DATETIME(h2.started_at/1000, 'unixepoch') = max_started_at;
-
-
--- Решение с сторонними библиотеками
-select load_extension('/home/iisakov/Загрузки/sqlean/regexp.so');
-select load_extension('/home/iisakov/Загрузки/sqlean/define.so');
-select define('normalize_date', 'DATETIME(?/1000, ''unixepoch'')');
-WITH c_date as (
-	select DATETIME('2020-10-10') cd -- Изменение даты ищет открытые задачи на дату
-)
-select
-	t.issue_key,
-	min_started_at "min",
-	h2.status 
-from (
-SELECT 
-	h.issue_key,
-	max(normalize_date(h.started_at)) max_started_at,
-	min(normalize_date(h.started_at)) min_started_at
-FROM history h 
-where normalize_date(h.started_at) <= (select cd from c_date)
-group by issue_key
-HAVING 
-	(GROUP_concat(status) not REGEXP 'Closed|Resolved') 
-and max(normalize_date(h.started_at)) <= (select cd from c_date)
-) t
-LEFT join history h2 on normalize_date(h2.started_at) = max_started_at;
-select define_free();
+select 
+	issue_key,
+	status,
+	normal_started_at
+from t
+where num = 1 and (status not in ('Closed', 'Resolved'))
+order by normal_started_at
