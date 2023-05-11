@@ -18,12 +18,12 @@ SELECT
 	issue_key,
 	sum(minutes_in_status) sum_minutes_in_status
 FROM history h
-group by issue_key, status
-having status = 'Open'
+where status = 'Open'
+group by issue_key
 )
 select 
-	substr(issue_key,0,instr(issue_key, '-')),
-	round(avg(t.sum_minutes_in_status)/60.00, 2)
+	substr(issue_key,0,instr(issue_key, '-')) 'Группа',
+	round(avg(t.sum_minutes_in_status)/60.00, 2) 'Среднее время задачи в статутсе Open'
 from t
 group by substr(issue_key,0,instr(issue_key, '-'))
 
